@@ -1,0 +1,66 @@
+<?php
+// Licence: WTFPL ! http://www.wtfpl.net/about/
+
+$fbAuth = array("facebook_id" => "123456789", "facebook_token" => "<Use charles proxy to do man-in-middle SSL sniffing and extract fb token>");
+
+
+// Do the magic.
+
+$tinderToken = tinderCall("auth", "token", $fbAuth); // Authenticate
+$authToken = "X-Auth-Token: $tinderToken\r\nAuthorization: Token token=\"$tinderToken\"\r\n";
+$likerResults = array();
+
+while (true) {
+	$profiles = tinderCall("user/recs", "results"); // Get the matches
+
+	if (!$profiles) exit(":( Oh Shit! you ran out of matches.");
+
+	foreach($profiles as $profile){
+		$match = tinderCall("like/".$profile["_id"], "match");
+
+		$result = array(
+			"name" => $profile["name"],
+			"birth_date" => @date("d/M/y", @strtotime($profile["birth_date"])),
+			"distance" => $profile["distance_mi"],
+			"photo" => $profile["photos"][0]["processedFiles"][0]["url"],
+			"id" => $profile["_id"],
+			"match" => $match
+		);
+
+		$likerResults = $result;
+		print_r($result);
+
+		$f = fopen("results.csv", 'a');
+		fputcsv($f, array_values($result));
+		fclose($f);
+	}	
+}
+
+
+
+// Tinder mini-REST API
+function tinderCall($path, $returnField = "", $data = ""){
+	global $authToken;
+
+	$context = array(
+	    'http' => array(
+	        'method' => ($data == "") ? 'GET' : 'POST',
+	        'header' => "User-Agent: User-Agent: Tinder/3.0.4 (iPhone; iOS 7.1.1; Scale/2.00)\r\n".
+	            "Content-Type: application/json\r\nos_version: 70000100001\r\nAccept: */*\r\nplatform: ios\r\n".
+	            "app_version: 3\r\n".$authToken
+	    )
+	);
+
+	if ($data != "") $context['http']['content'] = json_encode($data);
+	//print_r($context);
+	$response = file_get_contents('https://api.gotinder.com/'.$path, FALSE, stream_context_create($context));
+
+	file_put_contents("log.txt", $response."\n", FILE_APPEND);
+	$response = json_decode($response, TRUE);
+	//print_r($response);
+
+	if($returnField) $response = $response[$returnField];
+
+	return $response;	
+}
+?>
